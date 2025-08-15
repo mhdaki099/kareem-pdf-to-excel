@@ -2325,7 +2325,7 @@ def display_branding():
     """Display company branding in a simple, clean way"""
     st.markdown("""
     <div class="main-header">
-        <h1 style='margin-bottom: 10px; font-size: 3.5rem; font-weight: 300;'>Alphamed</h1>
+        <h1 style='margin-bottom: 10px; font-size: 3.5rem; font-weight: 300;'>Alphamed - Instituation</h1>
         <h2 style='margin: 0; font-size: 1.8rem; font-weight: 300; opacity: 0.9;'>PDF Data Extractor</h2>
         <div style='margin-top: 20px; padding: 15px; background-color: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);'>
             <p style='margin: 0; font-size: 1.1rem; opacity: 0.9;'>Extract and process data from PDF invoices with ease</p>
@@ -2547,4 +2547,5 @@ def combine_chunked_results(results):
 if __name__ == "__main__":
 
     main()
+
 
