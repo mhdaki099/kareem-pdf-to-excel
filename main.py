@@ -940,8 +940,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# if 'username' not in st.session_state or not st.session_state.username:
-#     st.session_state.username = 'anonymous@akigroup.com'
+if 'username' not in st.session_state or not st.session_state.username:
+    st.session_state.username = 'Institution@akigroup.com'
 
 DEFAULT_PASSWORD = 'AKI@2025'
 USER_TRACKING_FILE = 'user_tracking.xlsx'
@@ -2547,3 +2547,4 @@ def combine_chunked_results(results):
 if __name__ == "__main__":
 
     main()
+
