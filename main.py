@@ -941,7 +941,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if 'username' not in st.session_state or not st.session_state.username:
-    st.session_state.username = 'Institution@akigroup.com'
+    st.session_state.username = 'anonymous@akigroup.com'
 
 DEFAULT_PASSWORD = 'AKI@2025'
 USER_TRACKING_FILE = 'user_tracking.xlsx'
@@ -1099,15 +1099,30 @@ def process_invoice_lines(invoice_info):
             'Date of Manufacture': 'Mfg Date',
             'DOM': 'Mfg Date',
             'Manufactured On': 'Mfg Date',
-            'Manuf. Date': 'Mfg Date'
+            'Manuf. Date': 'Mfg Date',
+            'Promised Date': 'Promised Date',
+            'Promise Date': 'Promised Date',
+            'Date Promised': 'Promised Date',
+            'Need by Date': 'Need by Date',
+            'Need Date': 'Need by Date',
+            'Required Date': 'Need by Date',
+            'Required By': 'Need by Date',
+            'Payment Terms': 'Payment Terms',
+            'Payment Term': 'Payment Terms',
+            'Terms of Payment': 'Payment Terms',
+            'Pay Terms': 'Payment Terms',
+            'Freight Terms': 'Freight Terms',
+            'Freight Term': 'Freight Terms',
+            'Shipping Terms': 'Freight Terms',
+            'Delivery Terms': 'Freight Terms'
         }
         
         standard_headers = [
             'PO Number', 'Item Code', 'Description', 'UOM', 'Quantity',
-            'Lot Number', 'Expiry Date', 'Mfg Date', 'Invoice No',
+            'Lot Number', 'Expiry Date', 'Mfg Date', 'Promised Date', 'Need by Date', 'Invoice No',
             'Unit Price', 'Total Price', 'Country', 'HS Code',
             'Invoice Date', 'Customer No', 'Payer Name', 'Currency',
-            'Supplier', 'Invoice Total', 'VAT'
+            'Supplier', 'Invoice Total', 'VAT', 'Payment Terms', 'Freight Terms'
         ]
 
         lines = [line.strip() for line in invoice_info.split('\n')]
@@ -1427,10 +1442,12 @@ Rules:
 - Dates should be dd-MMM-yy when present.
 - Currency: infer from supplier location if needed (EUR for Europe, USD for USA, THB for Thailand) when not explicit.
 - Payer Name must be exactly: ALPHAMED GENERAL TRADING LLC.
+- Payment Terms: Extract payment terms (e.g., "Net 30", "COD", "Due on receipt"). Use "-" if not found.
+- Freight Terms: Extract freight/shipping terms (e.g., "FOB", "CIF", "EXW"). Use "-" if not found.
 
 Output format:
 - Return ONLY a Markdown table with these exact columns in order:
-  | PO Number | Item Code | Description | UOM | Quantity | Lot Number | Expiry Date | Mfg Date | Invoice No | Unit Price | Total Price | Country | HS Code | Invoice Date | Customer No | Payer Name | Currency | Supplier | Invoice Total | VAT |
+  | PO Number | Item Code | Description | UOM | Quantity | Lot Number | Expiry Date | Mfg Date | Promised Date | Need by Date | Invoice No | Unit Price | Total Price | Country | HS Code | Invoice Date | Customer No | Payer Name | Currency | Supplier | Invoice Total | VAT | Payment Terms | Freight Terms |
 - Include the separator line and one row per item/batch.
 """
 
@@ -1454,468 +1471,6 @@ Output format:
         st.error(f"Error in API call: {str(e)}")
         return None
 
-
-# def using_groq(text: str):
-#     """
-#     Process invoice text through OpenAI API with enhanced focus on batch extraction,
-#     with special handling for large files.
-    
-#     Args:
-#         text (str): The text extracted from the invoice PDF
-        
-#     Returns:
-#         str: The processed invoice information with structured data
-#     """
-#     import re
-    
-#     if not text:
-#         return None
-    
-#     estimated_tokens = len(text) // 4
-    
-#     # Pre-process the text to identify products with multiple batches
-#     # This helps us ensure we don't lose batch information when chunking
-#     product_batches = {}
-    
-#     # Look for batch patterns
-#     batch_patterns = [
-#         r'(?i)Batch\s*No\s*:\s*([A-Z0-9]+).*?Quantity\s*:\s*(\d+)',
-#         r'(?i)Batch\s*No\s*:\s*([A-Z0-9]+)',
-#         r'(?i)Lot\s*Number\s*:\s*([A-Z0-9]+)',
-#         r'(?i)Batch/Lot\s*:\s*([A-Z0-9]+)'
-#     ]
-    
-#     # Try to find product codes associated with batches
-#     product_code_pattern = r'(?i)(?:Supplier\s*Item\s*Code|Item\s*Code)\s*:?\s*([0-9]{10,14})'
-    
-#     # Find product descriptions
-#     product_desc_pattern = r'(?i)(?:Supplier\s*Description|Description)\s*:?\s*([A-Za-z0-9\s]+)'
-    
-#     # Look for multiple batches in the text before chunking
-#     current_product = None
-#     current_description = None
-    
-#     lines = text.split('\n')
-#     for i, line in enumerate(lines):
-#         # Try to identify product code
-#         product_match = re.search(product_code_pattern, line)
-#         if product_match:
-#             current_product = product_match.group(1)
-            
-#             # Try to find description in the same line or next line
-#             desc_match = re.search(product_desc_pattern, line)
-#             if desc_match:
-#                 current_description = desc_match.group(1).strip()
-#             elif i+1 < len(lines):
-#                 desc_match = re.search(product_desc_pattern, lines[i+1])
-#                 if desc_match:
-#                     current_description = desc_match.group(1).strip()
-        
-#         # If we have a current product, look for batch information
-#         if current_product:
-#             for pattern in batch_patterns:
-#                 batch_matches = re.finditer(pattern, line)
-#                 for match in batch_matches:
-#                     batch_number = match.group(1)
-                    
-#                     # Look for quantity, manufacturing date, and expiry date near this batch
-#                     quantity = None
-#                     mfg_date = None
-#                     exp_date = None
-                    
-#                     # Check current line and next few lines for associated info
-#                     context_lines = '\n'.join(lines[max(0, i-2):min(len(lines), i+3)])
-                    
-#                     # Extract quantity
-#                     qty_match = re.search(rf'(?i)(?:Quantity|Qty).*?{batch_number}.*?:\s*(\d+)', context_lines)
-#                     if not qty_match:
-#                         qty_match = re.search(r'(?i)(?:Quantity|Qty)\s*:\s*(\d+)', context_lines)
-#                     if qty_match:
-#                         quantity = qty_match.group(1)
-                    
-#                     # Extract manufacturing date
-#                     mfg_match = re.search(rf'(?i)(?:Manuf\.?|Manufacturing)\s*Date.*?{batch_number}.*?:\s*([0-9\-]+)', context_lines)
-#                     if not mfg_match:
-#                         mfg_match = re.search(r'(?i)(?:Manuf\.?|Manufacturing)\s*Date\s*:\s*([0-9\-]+)', context_lines)
-#                     if mfg_match:
-#                         mfg_date = mfg_match.group(1)
-                    
-#                     # Extract expiry date
-#                     exp_match = re.search(rf'(?i)(?:Expiry|Exp\.?)\s*Date.*?{batch_number}.*?:\s*([0-9\-]+)', context_lines)
-#                     if not exp_match:
-#                         exp_match = re.search(r'(?i)(?:Expiry|Exp\.?)\s*Date\s*:\s*([0-9\-]+)', context_lines)
-#                     if exp_match:
-#                         exp_date = exp_match.group(1)
-                    
-#                     # Store all the batch information
-#                     if current_product not in product_batches:
-#                         product_batches[current_product] = {
-#                             'description': current_description,
-#                             'batches': []
-#                         }
-                    
-#                     product_batches[current_product]['batches'].append({
-#                         'batch_number': batch_number,
-#                         'quantity': quantity,
-#                         'mfg_date': mfg_date,
-#                         'exp_date': exp_date
-#                     })
-    
-#     # Enhanced prompt with MUCH stronger emphasis on multiple batches
-#     prompt_template = """Extract ALL invoice line items without skipping ANY. Every line must have ALL fields filled.
-
-# {text_content}
-
-# ### CRITICAL INSTRUCTION: CREATE SEPARATE ROWS FOR EACH BATCH
-# When a product has multiple batches, you MUST create a separate row for EACH batch.
-# For example, if PARODONTAX COMPLETE PRO TB SOFT 1X1 has 3 batches (4316158, 5028371, 5029171), 
-# create THREE SEPARATE ROWS with the same item code and description but different batch numbers,
-# quantities, manufacturing dates, and expiry dates.
-
-# {known_batches_info}
-
-# ### Mandatory Fields (Every row must have values):
-#    - PO Number: Order Number or Purchase Order fields. 
-#      IMPORTANT: Remove any text like "MDS", "-MDS", "/MDS" after the number
-#      If not found, use "-"
-#    - Item Code: MUST be the full product code, usually 12-15 digits (e.g., 60000000128537)
-#      If you see shorter numeric codes like "300" or "310", look for the actual full item code
-#      NEVER use short numbers like 300, 310, etc. as item codes - these are likely line numbers
-#    - Description: If missing, use "Product Line " + line number
-#    - UOM: Unit of Measure 
-#    - Quantity: or Quantity Shipped - IMPORTANT: Each batch has its own quantity
-#    - Lot Number: Example: "Batch/serial Nr 272130" means lot number is "272130"
-#                  *** CRITICAL: When you see "Batch No: 4316158, 5028371, 5029171" or multiple batches anywhere, 
-#                  you MUST create SEPARATE ROWS for each batch number ***
-#                  Only use "N/A" if confirmed missing after thorough search
-#    - Expiry Date: use "-" if missing, format as DD-MMM-YY
-#                   *** CRITICAL: Each batch usually has its own expiry date - create separate rows accordingly ***
-#    - Manufacturing Date or Mfg Date: Each batch usually has its own manufacturing date
-#    - Invoice No: MUST be found - look in header
-#    - Unit Price: Default to Total Price if missing
-#    - Total Price: Default to Unit Price × Quantity if missing
-#    - Country: Convert codes to full names (e.g., IE → Ireland)
-#    - HS Code: Default "-" if missing
-#    - Invoice Date: Extract from header or near invoice number (format: dd-MMM-yy)
-#    - Customer No: Extract from "Customer Nr" fields or fallback to company code
-#    - Payer Name: ALWAYS exactly "ALPHAMED GENERAL TRADING LLC." (no exceptions)
-#    - Currency: Use "EUR" for European suppliers, "USD" for USA, "THB" for Thailand
-#    - Supplier: MUST find the company name from letterhead/invoice header
-#    - Invoice Total: Sum all line totals if not explicitly stated
-#    - VAT: Look for VAT percentage or amount - use "0" if not found
-
-# DO NOT SKIP ANY LINE ITEMS. If you see item codes or sequential line items even without full details, include them all.
-# If you see a table with entries in the document, extract EVERY LINE in that table regardless of context.
-
-# THIS IS CRUCIAL: If a product appears only once but has multiple batches listed together (e.g., "Batch No: 4316158, 5028371, 5029171"), 
-# you MUST create SEPARATE ROWS for each batch. NEVER combine multiple batches in a single row.
-
-# ### Output Format:
-# Return ONLY a clean table with pipe delimiters (|) between columns. Include a header row and separator line.
-# Each data row should represent ONE line item or ONE batch from the invoice.
-
-# {chunk_directive}
-# """
-    
-#     # Prepare known batches info string
-#     known_batches_info = ""
-#     if product_batches:
-#         known_batches_info = "### KNOWN PRODUCTS WITH MULTIPLE BATCHES (ENSURE THESE ARE EXTRACTED CORRECTLY):\n"
-#         for product_code, info in product_batches.items():
-#             batches_str = ", ".join([b['batch_number'] for b in info['batches']])
-#             known_batches_info += f"- Product {product_code} ({info['description'] or 'Unknown Description'}) has these batches: {batches_str}\n"
-#             known_batches_info += "  YOU MUST create separate rows for each of these batches.\n"
-    
-#     if estimated_tokens < 7000:
-#         prompt = prompt_template.format(
-#             text_content=text,
-#             known_batches_info=known_batches_info,
-#             chunk_directive=""
-#         )
-        
-#         try:
-#             from openai import OpenAI
-#             client = OpenAI(api_key=open_api_key)
-            
-#             completion = client.chat.completions.create(
-#                 model="gpt-4o",  
-#                 messages=[
-#                     {
-#                         "role": "system",
-#                         "content": "You are an invoice processing assistant focused on accurate extraction. Your TOP PRIORITY is to create separate rows for each batch when multiple batches exist for the same item. NEVER combine multiple batches into a single row."
-#                     },
-#                     {
-#                         "role": "user",
-#                         "content": prompt
-#                     }
-#                 ],
-#                 temperature=0.1
-#             )
-#             return completion.choices[0].message.content
-#         except Exception as e:
-#             st.error(f"Error in API call: {str(e)}")
-#             return None
-            
-#     # Handle large documents with improved chunking
-#     st.info(f"Processing large document (est. {estimated_tokens} tokens) using improved multi-batch chunking...")
-    
-#     # Improved chunking strategy that preserves batch information
-#     from collections import defaultdict
-    
-#     # First, identify complete sections for products
-#     product_sections = defaultdict(list)
-#     current_section = []
-#     current_section_product = None
-    
-#     # Enhanced parsing to identify product sections
-#     lines = text.split('\n')
-#     i = 0
-#     while i < len(lines):
-#         line = lines[i]
-        
-#         # Check if line contains a product code
-#         product_match = re.search(product_code_pattern, line)
-        
-#         # If we found a new product code, start a new section
-#         if product_match:
-#             # If we had a previous section, save it
-#             if current_section and current_section_product:
-#                 product_sections[current_section_product].extend(current_section)
-            
-#             # Start new section
-#             current_section_product = product_match.group(1)
-#             current_section = [line]
-            
-#             # Include surrounding lines for context
-#             start_idx = max(0, i-5)
-#             end_idx = min(len(lines), i+20)  # Include more lines after product code for batch info
-            
-#             # Add context before the product code line
-#             for j in range(start_idx, i):
-#                 current_section.insert(0, lines[j])
-            
-#             # Continue reading lines until we either find another product or reach max lines
-#             context_lines_added = 0
-#             j = i + 1
-#             while j < end_idx and context_lines_added < 20:
-#                 next_line = lines[j]
-#                 # Stop if we find another product code
-#                 if re.search(product_code_pattern, next_line):
-#                     break
-#                 current_section.append(next_line)
-#                 context_lines_added += 1
-#                 j += 1
-            
-#             # Skip the lines we've already added
-#             i = j
-#         else:
-#             # Just move to next line
-#             i += 1
-    
-#     # Add the last section
-#     if current_section and current_section_product:
-#         product_sections[current_section_product].extend(current_section)
-    
-#     # Now we process each product individually or in logical chunks
-#     all_results = []
-#     progress_bar = st.progress(0)
-    
-#     # First, process known products with multiple batches
-#     total_products = len(product_sections) + 1  # +1 for the rest of the text
-#     product_idx = 0
-    
-#     for product_code, product_text in product_sections.items():
-#         if product_code in product_batches:
-#             status_text = st.empty()
-#             status_text.text(f"Processing product {product_code} with multiple batches...")
-            
-#             # Create a focused chunk for this product
-#             product_chunk = "\n".join(product_text)
-            
-#             # Create a specific prompt for this product
-#             specific_known_batches = f"### THIS PRODUCT HAS MULTIPLE BATCHES:\n"
-#             specific_known_batches += f"- Product {product_code} ({product_batches[product_code]['description'] or 'Unknown Description'}) has these batches:\n"
-#             for batch in product_batches[product_code]['batches']:
-#                 batch_info = f"  - Batch: {batch['batch_number']}"
-#                 if batch['quantity']:
-#                     batch_info += f", Quantity: {batch['quantity']}"
-#                 if batch['mfg_date']:
-#                     batch_info += f", Mfg Date: {batch['mfg_date']}"
-#                 if batch['exp_date']:
-#                     batch_info += f", Exp Date: {batch['exp_date']}"
-#                 specific_known_batches += batch_info + "\n"
-#             specific_known_batches += "CREATE SEPARATE ROWS for each batch above.\n"
-            
-#             prompt = prompt_template.format(
-#                 text_content=product_chunk,
-#                 known_batches_info=specific_known_batches,
-#                 chunk_directive=f"\nThis chunk contains product {product_code} which has multiple batches. Extract each batch as a separate row."
-#             )
-            
-#             try:
-#                 from openai import OpenAI
-#                 client = OpenAI(api_key=open_api_key)
-                
-#                 completion = client.chat.completions.create(
-#                     model="gpt-4o",
-#                     messages=[
-#                         {
-#                             "role": "system",
-#                             "content": f"You are an invoice processing assistant. Your ONLY task is to extract product {product_code} with its multiple batches. Create a SEPARATE ROW for EACH batch."
-#                         },
-#                         {
-#                             "role": "user",
-#                             "content": prompt
-#                         }
-#                     ],
-#                     temperature=0.1
-#                 )
-                
-#                 result = completion.choices[0].message.content
-#                 if result:
-#                     all_results.append(result)
-#             except Exception as e:
-#                 st.error(f"Error processing product {product_code}: {str(e)}")
-        
-#         product_idx += 1
-#         progress_bar.progress(product_idx / total_products)
-    
-#     # Process the rest of the text using the standard chunking approach
-#     remaining_text = text
-#     for product_code in product_sections:
-#         # Remove the sections we've already processed
-#         product_text = "\n".join(product_sections[product_code])
-#         remaining_text = remaining_text.replace(product_text, "")
-    
-#     if remaining_text.strip():
-#         status_text = st.empty()
-#         status_text.text("Processing remaining content...")
-        
-#         # Use existing chunking logic for the remaining text
-#         tables_and_remaining = extract_tables_and_remaining(remaining_text)
-        
-#         for i, (table_text, is_table) in enumerate(tables_and_remaining):
-#             if is_table:
-#                 status_text.text(f"Processing table {i+1}/{len(tables_and_remaining)}")
-                
-#                 if len(table_text) // 4 < 7000:
-#                     chunk_directive = "\nThis is a complete table. Extract ALL rows without skipping any."
-#                     prompt = prompt_template.format(
-#                         text_content=table_text,
-#                         known_batches_info=known_batches_info,
-#                         chunk_directive=chunk_directive
-#                     )
-                    
-#                     try:
-#                         from openai import OpenAI
-#                         client = OpenAI(api_key=open_api_key)
-                        
-#                         completion = client.chat.completions.create(
-#                             model="gpt-4o",
-#                             messages=[
-#                                 {
-#                                     "role": "system",
-#                                     "content": "You are an invoice processing assistant. Extract ALL line items and create separate rows for each batch."
-#                                 },
-#                                 {
-#                                     "role": "user",
-#                                     "content": prompt
-#                                 }
-#                             ],
-#                             temperature=0.1
-#                         )
-                        
-#                         result = completion.choices[0].message.content
-#                         if result:
-#                             all_results.append(result)
-#                     except Exception as e:
-#                         st.error(f"Error processing table: {str(e)}")
-#                 else:
-#                     table_chunks = split_table_by_rows(table_text)
-                    
-#                     for j, chunk in enumerate(table_chunks):
-#                         status_text.text(f"Processing table {i+1}/{len(tables_and_remaining)} - chunk {j+1}/{len(table_chunks)}")
-#                         chunk_directive = f"\nThis is part {j+1}/{len(table_chunks)} of a table. Extract EVERY row in this chunk."
-                        
-#                         prompt = prompt_template.format(
-#                             text_content=chunk,
-#                             known_batches_info=known_batches_info,
-#                             chunk_directive=chunk_directive
-#                         )
-                        
-#                         try:
-#                             from openai import OpenAI
-#                             client = OpenAI(api_key=open_api_key)
-                            
-#                             completion = client.chat.completions.create(
-#                                 model="gpt-4o",
-#                                 messages=[
-#                                     {
-#                                         "role": "system",
-#                                         "content": "You are an invoice processing assistant. Extract ALL line items and create separate rows for each batch."
-#                                     },
-#                                     {
-#                                         "role": "user",
-#                                         "content": prompt
-#                                     }
-#                                 ],
-#                                 temperature=0.1
-#                             )
-                            
-#                             result = completion.choices[0].message.content
-#                             if result:
-#                                 all_results.append(result)
-#                         except Exception as e:
-#                             st.error(f"Error processing table chunk: {str(e)}")
-#             else:
-#                 chunks = split_text_into_chunks(table_text, chunk_size=3000)
-                
-#                 for j, chunk in enumerate(chunks):
-#                     status_text.text(f"Processing non-table content {i+1}/{len(tables_and_remaining)} - chunk {j+1}/{len(chunks)}")
-#                     chunk_directive = f"\nThis is part {j+1}/{len(chunks)} of non-table content. Look for any hidden line items."
-                    
-#                     prompt = prompt_template.format(
-#                         text_content=chunk,
-#                         known_batches_info=known_batches_info,
-#                         chunk_directive=chunk_directive
-#                     )
-                    
-#                     try:
-#                         from openai import OpenAI
-#                         client = OpenAI(api_key=open_api_key)
-                        
-#                         completion = client.chat.completions.create(
-#                             model="gpt-4o",
-#                             messages=[
-#                                 {
-#                                     "role": "system",
-#                                     "content": "You are an invoice processing assistant. Extract ALL line items and create separate rows for each batch."
-#                                 },
-#                                 {
-#                                     "role": "user",
-#                                     "content": prompt
-#                                 }
-#                             ],
-#                             temperature=0.1
-#                         )
-                        
-#                         result = completion.choices[0].message.content
-#                         if result:
-#                             all_results.append(result)
-#                     except Exception as e:
-#                         st.error(f"Error processing non-table chunk: {str(e)}")
-        
-#         product_idx += 1
-#         progress_bar.progress(product_idx / total_products)
-    
-#     progress_bar.empty()
-    
-#     if not all_results:
-#         return None
-    
-#     combined_result = combine_chunked_results(all_results)
-    
-#     return combined_result
 
 
 def process_with_stricter_instructions(text):
@@ -1942,15 +1497,39 @@ def standardize_headers(headers):
         'Total VAT or VAT': 'VAT',
         'Total Amount of the Invoice': 'Invoice Total',
         'Payer Name': 'Payer Name', 
-        'Date of Invoice': 'Invoice Date'  
+        'Date of Invoice': 'Invoice Date',
+        'Manufacturing Date': 'Mfg Date',
+        'Manufacture Date': 'Mfg Date',
+        'Production Date': 'Mfg Date',
+        'Prod Date': 'Mfg Date',
+        'Prod. Date': 'Mfg Date',
+        'Date of Manufacture': 'Mfg Date',
+        'DOM': 'Mfg Date',
+        'Manufactured On': 'Mfg Date',
+        'Manuf. Date': 'Mfg Date',
+        'Promised Date': 'Promised Date',
+        'Promise Date': 'Promised Date',
+        'Date Promised': 'Promised Date',
+        'Need by Date': 'Need by Date',
+        'Need Date': 'Need by Date',
+        'Required Date': 'Need by Date',
+        'Required By': 'Need by Date',
+        'Payment Terms': 'Payment Terms',
+        'Payment Term': 'Payment Terms',
+        'Terms of Payment': 'Payment Terms',
+        'Pay Terms': 'Payment Terms',
+        'Freight Terms': 'Freight Terms',
+        'Freight Term': 'Freight Terms',
+        'Shipping Terms': 'Freight Terms',
+        'Delivery Terms': 'Freight Terms'
     }
 
     standard_headers = [
         'PO Number', 'Item Code', 'Description', 'UOM', 'Quantity',
-        'Lot Number', 'Expiry Date', 'Mfg Date', 'Invoice No',
+        'Lot Number', 'Expiry Date', 'Mfg Date', 'Promised Date', 'Need by Date', 'Invoice No',
         'Unit Price', 'Total Price', 'Country', 'HS Code',
         'Invoice Date', 'Customer No', 'Payer Name', 'Currency',
-        'Supplier', 'Invoice Total', 'VAT'
+        'Supplier', 'Invoice Total', 'VAT', 'Payment Terms', 'Freight Terms'
     ]
 
 
@@ -2226,7 +1805,6 @@ def main_app():
     
 
 def main():
-    # Add custom CSS for modern, simple design
     st.markdown("""
     <style>
     .main-header {
@@ -2325,7 +1903,7 @@ def display_branding():
     """Display company branding in a simple, clean way"""
     st.markdown("""
     <div class="main-header">
-        <h1 style='margin-bottom: 10px; font-size: 3.5rem; font-weight: 300;'>Alphamed - Instituation</h1>
+        <h1 style='margin-bottom: 10px; font-size: 3.5rem; font-weight: 300;'>Alphamed</h1>
         <h2 style='margin: 0; font-size: 1.8rem; font-weight: 300; opacity: 0.9;'>PDF Data Extractor</h2>
         <div style='margin-top: 20px; padding: 15px; background-color: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);'>
             <p style='margin: 0; font-size: 1.1rem; opacity: 0.9;'>Extract and process data from PDF invoices with ease</p>
@@ -2529,8 +2107,8 @@ def combine_chunked_results(results):
                     data_rows.append(line)
     
     if not header_row:
-        header_row = "| PO Number | Item Code | Description | UOM | Quantity | Lot Number | Expiry Date | Mfg Date | Invoice No | Unit Price | Total Price | Country | HS Code | Invoice Date | Customer No | Payer Name | Currency | Supplier | Invoice Total | VAT |"
-        separator_row = "|-----------|-----------|------------|-----|----------|-----------|-------------|----------|-----------|-----------|------------|---------|---------|-------------|------------|-----------|----------|----------|--------------|-----|"
+        header_row = "| PO Number | Item Code | Description | UOM | Quantity | Lot Number | Expiry Date | Mfg Date | Promised Date | Need by Date | Invoice No | Unit Price | Total Price | Country | HS Code | Invoice Date | Customer No | Payer Name | Currency | Supplier | Invoice Total | VAT | Payment Terms | Freight Terms |"
+        separator_row = "|-----------|-----------|------------|-----|----------|-----------|-------------|----------|---------------|---------------|-----------|-----------|------------|---------|---------|-------------|------------|-----------|----------|----------|--------------|-----|---------------|---------------|"
     
     table_parts = [header_row]
     
@@ -2545,7 +2123,4 @@ def combine_chunked_results(results):
 
 
 if __name__ == "__main__":
-
     main()
-
-
